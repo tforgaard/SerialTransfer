@@ -1,11 +1,19 @@
 #pragma once
-/* UNCOMMENT FOR USAGE
+
 #include "Arduino.h"
 
-#if not(defined(MBED_H) || defined(__SAM3X8E__)) // These boards are/will not be supported by SPITransfer.h
+// #if not(defined(MBED_H) || defined(__SAM3X8E__)) // These boards are/will not be supported by SPITransfer.h
 
 #include "Packet.h"
-#include "SPI.h"
+// #include "SPISlave_T4.h"
+#include "SPI.h" 
+#define CIRCULAR_BUFFER_INT_SAFE
+#include "CircularBuffer.h"
+
+// static CircularBuffer<unsigned char,255> SPIBuffer;
+// static volatile unsigned char SPIBuffer[16];
+// static volatile uint8_t buffer_index;
+
 
 
 class SPITransfer
@@ -16,13 +24,14 @@ class SPITransfer
 	int8_t  status    = 0;
 
 
-	void    begin(SPIClass& _port, const configST configs, const uint8_t& _SS = SS);
-	void    begin(SPIClass& _port, const uint8_t& _SS = SS, const bool _debug = true, Stream& _debugPort = Serial);
+	void    begin(CircularBuffer<unsigned char, 255>* _buff, const configST configs, const uint8_t& _SS = SS);
+	void    begin(CircularBuffer<unsigned char, 255>* _buff, const uint8_t& _SS = SS, const bool _debug = true, Stream& _debugPort = Serial);
 	uint8_t sendData(const uint16_t& messageLen, const uint8_t packetID = 0);
 	uint8_t available();
 	uint8_t currentPacketID();
 
-*/
+	uint8_t finished();
+
 	/*
 	 uint16_t SPITransfer::txObj(const T &val, const uint16_t &index=0, const uint16_t &len=sizeof(T))
 	 Description:
@@ -41,14 +50,13 @@ class SPITransfer
 	 -------
 	  * uint16_t maxIndex - uint16_t maxIndex - Index of the transmit buffer (txBuff) that directly follows the bytes processed
 	  by the calling of this member function
-	*//*
+	*/
 	template <typename T>
 	uint16_t txObj(const T& val, const uint16_t& index = 0, const uint16_t& len = sizeof(T))
 	{
 		return packet.txObj(val, index, len);
 	}
 
-*/
 	/*
 	 uint16_t SPITransfer::rxObj(const T &val, const uint16_t &index=0, const uint16_t &len=sizeof(T))
 	 Description:
@@ -67,14 +75,14 @@ class SPITransfer
 	 -------
 	  * uint16_t maxIndex - Index of the receive buffer (rxBuff) that directly follows the bytes processed
 	  by the calling of this member function
-	*//*
+	*/
 	template <typename T>
 	uint16_t rxObj(const T& val, const uint16_t& index = 0, const uint16_t& len = sizeof(T))
 	{
 		return packet.rxObj(val, index, len);
 	}
 
-*/
+
 	/*
 	 uint8_t SPITransfer::sendDatum(const T &val, const uint16_t &len=sizeof(T))
 	 Description:
@@ -91,7 +99,7 @@ class SPITransfer
 	 Return:
 	 -------
 	  * uint8_t - Number of payload bytes included in packet
-	*//*
+	*/
 	template <typename T>
 	uint8_t sendDatum(const T& val, const uint16_t& len = sizeof(T))
 	{
@@ -99,10 +107,18 @@ class SPITransfer
 	}
 
 
+	volatile bool ready_2_send_flag = 0; 
+	volatile bool sending_flag = 0; 
   private: // <<---------------------------------------//private
-	SPIClass* port;
+
+	// static SPISlave_T4 port;
+	// static volatile unsigned char SPIBuffer[255];
+	// static volatile uint8_t buffer_index;
+	CircularBuffer<unsigned char, 255>*	buff;
 	uint8_t   ssPin;
+	void _transfer(uint8_t data);
+
 };
 
-#endif // not (defined(MBED_H) || defined(__SAM3X8E__))
-*/
+// #endif // not (defined(MBED_H) || defined(__SAM3X8E__))
+
