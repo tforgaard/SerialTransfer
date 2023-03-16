@@ -4,9 +4,92 @@
 
 #include "SPITransfer.h"
 
+static CircularBuffer<unsigned char,260> SPIBuffer;
+static volatile bool ready_2_send_flag = 0;
+static volatile bool sending_flag = 0;
 
-//TODO: move interrupt routine into here again
-// define circularbuffer here as well
+static SPISlave_T4* port;
+
+#define INT_PIN 9
+
+
+//TODO: try to only send one byte per routine and use static variable to hold index
+static void _interrupt_routine()
+{
+//   Serial.println("ouf");
+    while (port->available()) {
+        if (!SPIBuffer.isEmpty() && ready_2_send_flag)
+        {
+			if (!sending_flag) sending_flag = 1;
+
+			// Serial1.print("buffer size: "); Serial1.println(SPIBuffer.size());
+
+			// Serial.print("sending data: "); Serial.println(SPIBuffer.first());
+			port->pushr(SPIBuffer.shift());
+			port->popr();
+			// Serial1.print(port->popr()); Serial1.print(" ");
+
+			if (SPIBuffer.isEmpty())
+			{
+				ready_2_send_flag = 0;
+				sending_flag = 0;
+				digitalWrite(INT_PIN,LOW);
+			}
+        }
+        else
+        {
+			if (ready_2_send_flag && sending_flag)
+			{
+				ready_2_send_flag = 0;
+				sending_flag = 0;
+				digitalWrite(INT_PIN,LOW);
+			}
+
+		//   Serial1.print("sending_flag: "); Serial1.println(sending_flag);
+		//   Serial1.print("ready_2_send_flag: "); Serial1.println(ready_2_send_flag);
+        //   Serial1.print("buffer len: "); Serial1.println(SPIBuffer.size());
+
+          if (!ready_2_send_flag)
+          {
+			port->popr();
+			//   Serial1.print("whats popping: "); Serial1.println(port->popr());
+          }
+        }
+    }
+}
+
+// //Only send one byte per interrupt routine to keep it short
+static void _interrupt_routinev2()
+{
+    if (port->available()) {
+        if (!SPIBuffer.isEmpty() && ready_2_send_flag)
+        {
+			if (!sending_flag) sending_flag = 1;
+			// Serial1.print("buffer size: "); Serial1.println(SPIBuffer.size());
+			// Serial1.print(); Serial1.print(" ");
+			port->popr();
+			// Serial.print("sending data"); // Serial.println(SPIBuffer.first());
+			port->pushr(SPIBuffer.shift());
+
+			if (SPIBuffer.isEmpty()) // We are finished transmitting, clear flags
+			{
+				ready_2_send_flag = 0;
+				sending_flag = 0;
+				digitalWrite(INT_PIN,LOW);
+			}
+        }
+        else 
+        {
+			if (!ready_2_send_flag) // We are not transmitting
+			{
+				port->popr();
+				// Serial1.print("whats popping:"); Serial1.println();
+			}
+        }
+    }
+}
+
+//TODO:
 // then move sendData function to interrupt routine
 // must also move packet to header static
 
@@ -26,18 +109,17 @@
   * void
 */
 
-void SPITransfer::begin(CircularBuffer<unsigned char, 255>* _buff, const configST configs, const uint8_t& _SS)
+void SPITransfer::begin(SPISlave_T4* _port, const configST configs, const uint8_t& _SS)
 {
-	buff = _buff;
-	//SPISlave_T4& _port
-	// port = &_port;
-	// port = SPISlave_T4<&_port,SPI_8_BITS>();
+	port = _port;
 	packet.begin(configs);
-	// port.onReceive(_interrupt_routine);
-  	// port.begin();
+  	port->begin(MSBFIRST, SPI_MODE0);
+	port->onReceive(_interrupt_routine);
 	ssPin = _SS;
-	// memset(SPIBuffer, 0, sizeof(SPIBuffer));// clear the buffer
-    // buffer_index = 0;// reset count
+
+	
+  	pinMode(INT_PIN,OUTPUT);
+  	digitalWrite(INT_PIN,LOW);
 }
 
 
@@ -57,13 +139,19 @@ void SPITransfer::begin(CircularBuffer<unsigned char, 255>* _buff, const configS
  -------
   * void
 */
-void SPITransfer::begin(CircularBuffer<unsigned char, 255>* _buff, const uint8_t& _SS, const bool _debug, Stream& _debugPort)
+
+
+void SPITransfer::begin(SPISlave_T4* _port, const uint8_t& _SS, const bool _debug, Stream& _debugPort)
 {
-	buff = _buff;
-	// port = SPISlave_T4<&_port,SPI_BITS::SPI_8_BITS>();
-	// port = &_port;
+	port = _port;
 	packet.begin(_debug, _debugPort);
+	port->begin(MSBFIRST, SPI_MODE0);
+	port->onReceive(_interrupt_routine);
 	ssPin = _SS;
+
+	
+  	pinMode(INT_PIN,OUTPUT);
+  	digitalWrite(INT_PIN,LOW);
 }
 
 /*
@@ -84,32 +172,43 @@ uint8_t SPITransfer::sendData(const uint16_t& messageLen, const uint8_t packetID
 {
 	// TODO: just set flag here, then do the rest in the interrupt routine
 
+	Serial.println("sending data!");
+
 	uint8_t numBytesIncl = packet.constructPacket(messageLen, packetID);
 
 	// digitalWrite(SS, LOW); // Enable SS (active low)
 	for (uint8_t i = 0; i < sizeof(packet.preamble); i++)
 	{
-		delay(1); // This delay is needed
-		// port.transfer(packet.preamble[i]);
+		// delay(1); // This delay is needed
+		// port->transfer(packet.preamble[i]);
 		_transfer(packet.preamble[i]);
 	}
 
 	for (uint8_t i = 0; i < numBytesIncl; i++)
 	{
-		delay(1); // This delay is needed
-		// port.transfer(packet.txBuff[i]);
+		// delay(1); // This delay is needed
+		// port->transfer(packet.txBuff[i]);
 		_transfer(packet.txBuff[i]);
 	}
 
 	for (uint8_t i = 0; i < sizeof(packet.postamble); i++)
 	{
-		delay(1); // This delay is needed
-		// port.transfer(packet.postamble[i]);
+		// delay(1); // This delay is needed
+		// port->transfer(packet.postamble[i]);
 		_transfer(packet.postamble[i]);
 	}
 	// digitalWrite(SS, HIGH); // Disable SS (active low)
+	
+	// for (uint8_t i = 0; i < 260 - numBytesIncl - sizeof(packet.postamble) - sizeof(packet.preamble); i++)
+	// {
+	// 	// delay(1); // This delay is needed
+	// 	// port->transfer(packet.postamble[i]);
+	// 	_transfer(0x00);
+	// }
 
+	delay(1);
 	ready_2_send_flag = 1;
+	digitalWrite(INT_PIN,HIGH);
 	return numBytesIncl;
 }
 
@@ -138,15 +237,17 @@ uint8_t SPITransfer::available()
 
 uint8_t SPITransfer::finished()
 {
-	return buff->isEmpty() && !ready_2_send_flag;
+	return SPIBuffer.isEmpty() && !ready_2_send_flag;
+}
+
+uint8_t SPITransfer::sending()
+{
+	return sending_flag || ready_2_send_flag;
 }
 
 void SPITransfer::_transfer(uint8_t data){
-	// SPIBuffer[buffer_index] = data;
-	// buffer_index++;
-	buff->push(data);
-	Serial.print("adding data: "); Serial.println(data);
-	// Serial.print("buffer index: "); Serial.println(buffer_index);
+	SPIBuffer.push(data);
+	// Serial.print("adding data: "); Serial.println(data);
 }
 
 /*
@@ -167,4 +268,7 @@ uint8_t SPITransfer::currentPacketID()
 }
 
 // #endif // not (defined(MBED_H) || defined(__SAM3X8E__))
+
+
+
 

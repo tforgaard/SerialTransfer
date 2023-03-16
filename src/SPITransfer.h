@@ -5,15 +5,10 @@
 // #if not(defined(MBED_H) || defined(__SAM3X8E__)) // These boards are/will not be supported by SPITransfer.h
 
 #include "Packet.h"
-// #include "SPISlave_T4.h"
+#include "SPISlave_T4.h"
 #include "SPI.h" 
 #define CIRCULAR_BUFFER_INT_SAFE
 #include "CircularBuffer.h"
-
-// static CircularBuffer<unsigned char,255> SPIBuffer;
-// static volatile unsigned char SPIBuffer[16];
-// static volatile uint8_t buffer_index;
-
 
 
 class SPITransfer
@@ -23,14 +18,14 @@ class SPITransfer
 	uint8_t bytesRead = 0;
 	int8_t  status    = 0;
 
-
-	void    begin(CircularBuffer<unsigned char, 255>* _buff, const configST configs, const uint8_t& _SS = SS);
-	void    begin(CircularBuffer<unsigned char, 255>* _buff, const uint8_t& _SS = SS, const bool _debug = true, Stream& _debugPort = Serial);
+	void    begin(SPISlave_T4* _port, const configST configs, const uint8_t& _SS = SS);
+	void    begin(SPISlave_T4* _port, const uint8_t& _SS = SS, const bool _debug = true, Stream& _debugPort = Serial);
 	uint8_t sendData(const uint16_t& messageLen, const uint8_t packetID = 0);
 	uint8_t available();
 	uint8_t currentPacketID();
 
 	uint8_t finished();
+	uint8_t sending();
 
 	/*
 	 uint16_t SPITransfer::txObj(const T &val, const uint16_t &index=0, const uint16_t &len=sizeof(T))
@@ -107,14 +102,7 @@ class SPITransfer
 	}
 
 
-	volatile bool ready_2_send_flag = 0; 
-	volatile bool sending_flag = 0; 
   private: // <<---------------------------------------//private
-
-	// static SPISlave_T4 port;
-	// static volatile unsigned char SPIBuffer[255];
-	// static volatile uint8_t buffer_index;
-	CircularBuffer<unsigned char, 255>*	buff;
 	uint8_t   ssPin;
 	void _transfer(uint8_t data);
 
